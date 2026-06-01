@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coding Runtime Analysis - 效能優化分析</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f5f7fa; color: #333; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px; text-align: center; }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .header p { opacity: 0.9; font-size: 1.1em; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 30px; }
+        .category-section { background: white; border-radius: 12px; padding: 30px; margin-bottom: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .category-title { font-size: 1.8em; color: #667eea; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #667eea; }
+        .category-title::before { content: "▸ "; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .summary-card { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; padding: 20px; border-radius: 10px; text-align: center; }
+        .summary-card.blue { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .summary-card.orange { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .summary-card.purple { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #333; }
+        .summary-value { font-size: 2.5em; font-weight: bold; }
+        .summary-label { opacity: 0.9; margin-top: 5px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; overflow-x: auto; display: block; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; white-space: nowrap; }
+        th { background: #667eea; color: white; font-weight: 600; position: sticky; top: 0; }
+        tr:nth-child(even) { background: #f8f9fa; }
+        tr:hover { background: #e9ecef; }
+        .winner-a { color: #11998e; font-weight: bold; }
+        .winner-b { color: #f5576c; font-weight: bold; }
+        .chart-container { margin: 30px 0; position: relative; height: 400px; }
+        .insights { background: #fff3cd; border-left: 4px solid #ffc107; padding: 20px; margin: 20px 0; border-radius: 0 8px 8px 0; }
+        .insights h3 { color: #856404; margin-bottom: 15px; font-size: 1.2em; }
+        .insights ul { margin-left: 20px; line-height: 2; }
+        .insights li { margin-bottom: 8px; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .tab { padding: 10px 20px; background: #e9ecef; border: none; border-radius: 8px 8px 0 0; cursor: pointer; transition: all 0.3s; }
+        .tab:hover { background: #dee2e6; }
+        .tab.active { background: #667eea; color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .highlight { background: #e7f3ff; padding: 15px; border-radius: 8px; margin: 10px 0; }
+        .highlight strong { color: #667eea; }
+        .nav-tabs { position: sticky; top: 0; background: #f5f7fa; padding: 10px 0; z-index: 100; }
+        .nav-tabs a { display: inline-block; padding: 8px 16px; margin-right: 10px; background: white; color: #667eea; text-decoration: none; border-radius: 20px; border: 1px solid #667eea; }
+        .nav-tabs a:hover { background: #667eea; color: white; }
+        .stat-table td:nth-child(4), .stat-table td:nth-child(5) { font-family: monospace; }
+        .footer { text-align: center; padding: 30px; color: #666; }
+        @media (max-width: 768px) {
+            .summary-grid { grid-template-columns: 1fr 1fr; }
+            .chart-container { height: 300px; }
+            .header h1 { font-size: 1.8em; }
+            table { font-size: 0.9em; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Coding Runtime Analysis</h1>
+        <p>效能優化基準測試分析報告</p>
+        <p style="margin-top: 10px; font-size: 0.9em;">分析主題: 影像處理與深度學習效能比較</p>
+    </div>
+
+    <div class="container">
+        <!-- Overall Summary -->
+        <div class="category-section">
+            <h2 class="category-title">總體效能摘要</h2>
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <div class="summary-value">5</div>
+                    <div class="summary-label">基準測試模組</div>
+                </div>
+                <div class="summary-card blue">
+                    <div class="summary-value">7</div>
+                    <div class="summary-label">JSON 數據文件</div>
+                </div>
+                <div class="summary-card orange">
+                    <div class="summary-value">62%</div>
+                    <div class="summary-label">方案 B 勝出率</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-value">4.25x</div>
+                    <div class="summary-label">單項最大加速</div>
+                </div>
+            </div>
+            <div class="highlight">
+                <strong>分析類別分布:</strong>
+                Encoder 版本比較 | 圖片前處理效能 | 臉部辨識 | YOLOv8 Segmentation | YOLOv5 前處理 | SAM 座標轉換
+            </div>
+            <div class="insights" style="margin-top: 20px;">
+                <h3>修正說明</h3>
+                <ul>
+                    <li><strong>YOLOv5:</strong> JSON 中 A=preprocess_rgb, B=preprocess_bgr，故 winner="A" 實為 B (preprocess_bgr) 較快 30%</li>
+                    <li><strong>SAM:</strong> JSON 中 A=deepcopy, B=in-place，故 winner="A" 實為 B (in-place) 較快 4.25x</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Encoder Comparison -->
+        <div class="category-section">
+            <h2 class="category-title">Encoder 版本比較 (v3_comparison)</h2>
+            <div class="summary-grid">
+                <div class="summary-card blue">
+                    <div class="summary-value">11/12</div>
+                    <div class="summary-label">方案 B 勝出</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-value">54.3%</div>
+                    <div class="summary-label">平均效能提升</div>
+                </div>
+                <div class="summary-card orange">
+                    <div class="summary-value">4K x100</div>
+                    <div class="summary-label">最佳優化場景</div>
+                </div>
+            </div>
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('encoder-table', event)">📋 數據表格</button>
+                <button class="tab" onclick="showTab('encoder-chart', event)">📈 執行時間圖</button>
+                <button class="tab" onclick="showTab('encoder-diff', event)">📊 差異百分比圖</button>
+                <button class="tab" onclick="showTab('encoder-heatmap', event)">🗺️ 熱力圖</button>
+            </div>
+            <div id="encoder-table" class="tab-content active">
+                <table class="stat-table">
+                    <thead>
+                        <tr>
+                            <th>測試案例</th>
+                            <th>解析度</th>
+                            <th>倍數</th>
+                            <th>方案 A (ms)</th>
+                            <th>方案 B (ms)</th>
+                            <th>勝出者</th>
+                            <th>差異 %</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>720p x1</td><td>720p</td><td>x1</td><td>0.258</td><td>0.217</td><td class="winner-b">B</td><td>16.01%</td></tr>
+                        <tr><td>720p x100</td><td>720p</td><td>x100</td><td>0.101</td><td>0.043</td><td class="winner-b">B</td><td>57.26%</td></tr>
+                        <tr><td>720p x1000</td><td>720p</td><td>x1000</td><td>0.051</td><td>0.034</td><td class="winner-b">B</td><td>33.95%</td></tr>
+                        <tr><td>1080p x1</td><td>1080p</td><td>x1</td><td>0.188</td><td>0.230</td><td class="winner-a">A</td><td>-21.89%</td></tr>
+                        <tr><td>1080p x100</td><td>1080p</td><td>x100</td><td>0.054</td><td>0.014</td><td class="winner-b">B</td><td>74.01%</td></tr>
+                        <tr><td>1080p x1000</td><td>1080p</td><td>x1000</td><td>0.052</td><td>0.016</td><td class="winner-b">B</td><td>69.89%</td></tr>
+                        <tr><td>2K x1</td><td>2K</td><td>x1</td><td>0.396</td><td>0.305</td><td class="winner-b">B</td><td>23.07%</td></tr>
+                        <tr><td>2K x100</td><td>2K</td><td>x100</td><td>0.085</td><td>0.020</td><td class="winner-b">B</td><td>76.62%</td></tr>
+                        <tr><td>2K x1000</td><td>2K</td><td>x1000</td><td>0.052</td><td>0.013</td><td class="winner-b">B</td><td>75.32%</td></tr>
+                        <tr><td>4K x1</td><td>4K</td><td>x1</td><td>0.294</td><td>0.134</td><td class="winner-b">B</td><td>54.31%</td></tr>
+                        <tr><td>4K x100</td><td>4K</td><td>x100</td><td>0.089</td><td>0.021</td><td class="winner-b">B</td><td>76.86%</td></tr>
+                        <tr><td>4K x1000</td><td>4K</td><td>x1000</td><td>0.052</td><td>0.018</td><td class="winner-b">B</td><td>65.16%</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="encoder-chart" class="tab-content">
+                <div class="chart-container">
+                    <canvas id="encoderRuntimeChart"></canvas>
+                </div>
+            </div>
+            <div id="encoder-diff" class="tab-content">
+                <div class="chart-container">
+                    <canvas id="encoderDiffChart"></canvas>
+                </div>
+            </div>
+            <div id="encoder-heatmap" class="tab-content">
+                <div class="chart-container" style="height: 350px;">
+                    <canvas id="encoderHeatmap"></canvas>
+                </div>
+            </div>
+            <div class="insights">
+                <h3>分析洞察</h3>
+                <ul>
+                    <li><strong>批量處理優勢:</strong> 方案 B 在高解析度（1080p, 2K, 4K）的批量處理中展現 65-77% 的效能提升</li>
+                    <li><strong>單次執行劣勢:</strong> 720p 單次執行時方案 A 反而快 21.89%</li>
+                    <li><strong>最佳應用場景:</strong> 大量圖像批量處理時強烈建議使用方案 B</li>
+                    <li><strong>倍數效應:</strong> x100 提升最多，說明有初始化開銷優化空間</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Image Inference Comparison -->
+        <div class="category-section">
+            <h2 class="category-title">圖片前處理效能比較 (Inference)</h2>
+            <div class="summary-grid">
+                <div class="summary-card blue">
+                    <div class="summary-value">18/39</div>
+                    <div class="summary-label">方案 A 勝出</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-value">21.3%</div>
+                    <div class="summary-label">平均執行時間改進</div>
+                </div>
+                <div class="summary-card orange">
+                    <div class="summary-value">640x480</div>
+                    <div class="summary-label">最佳效能尺寸</div>
+                </div>
+            </div>
+            <table class="stat-table">
+                <thead>
+                    <tr>
+                        <th>函數</th>
+                        <th>尺寸</th>
+                        <th>呼叫次數</th>
+                        <th>A 執行 (ms)</th>
+                        <th>B 執行 (ms)</th>
+                        <th>記憶體 A (MB)</th>
+                        <th>記憶體 B (MB)</th>
+                        <th>CPU A (%)</th>
+                        <th>CPU B (%)</th>
+                        <th>勝出者</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>image_preprocess</td><td>640x480</td><td>1,000</td><td>0.000717</td><td>0.000804</td><td>304.3</td><td>306.6</td><td>0.0</td><td>14.8</td><td class="winner-a">A</td></tr>
+                    <tr><td>image_preprocess</td><td>640x480</td><td>5,000</td><td>0.000129</td><td>0.000153</td><td>307.5</td><td>308.7</td><td>17.0</td><td>13.8</td><td class="winner-a">A</td></tr>
+                    <tr><td>image_preprocess</td><td>640x480</td><td>10,000</td><td>0.000077</td><td>0.000064</td><td>309.4</td><td>309.4</td><td>14.2</td><td>13.7</td><td class="winner-b">B</td></tr>
+                    <tr><td>image_preprocess</td><td>640x480</td><td>50,000</td><td>0.000015</td><td>0.000011</td><td>309.5</td><td>310.9</td><td>13.7</td><td>15.4</td><td class="winner-b">B</td></tr>
+                    <tr><td>image_preprocess</td><td>1280x720</td><td>1,000</td><td>0.003006</td><td>0.002103</td><td>319.7</td><td>329.4</td><td>16.0</td><td>16.6</td><td class="winner-b">B</td></tr>
+                    <tr><td>image_preprocess</td><td>1920x1080</td><td>1,000</td><td>0.007293</td><td>0.004416</td><td>369.5</td><td>383.4</td><td>66.7</td><td>15.4</td><td class="winner-b">B</td></tr>
+                    <tr><td>image_preprocess</td><td>2560x1440</td><td>1,000</td><td>0.007086</td><td>0.005703</td><td>419.0</td><td>419.0</td><td>33.3</td><td>15.7</td><td class="winner-b">B</td></tr>
+                    <tr><td>preprocess_image</td><td>640x480</td><td>1,000</td><td>0.000826</td><td>0.001179</td><td>423.0</td><td>415.9</td><td>13.5</td><td>21.1</td><td class="winner-a">A</td></tr>
+                    <tr><td>preprocess_image</td><td>1280x720</td><td>1,000</td><td>0.003009</td><td>0.003213</td><td>412.4</td><td>417.8</td><td>14.3</td><td>13.9</td><td class="winner-a">A</td></tr>
+                    <tr><td>preprocess_image</td><td>1920x1080</td><td>1,000</td><td>0.004714</td><td>0.005327</td><td>432.7</td><td>432.7</td><td>16.5</td><td>14.8</td><td class="winner-a">A</td></tr>
+                    <tr><td>preprocess_image</td><td>2560x1440</td><td>1,000</td><td>0.008703</td><td>0.004354</td><td>338.1</td><td>338.1</td><td>18.8</td><td>25.1</td><td class="winner-b">B</td></tr>
+                </tbody>
+            </table>
+            <div class="chart-container">
+                <canvas id="inferenceChart"></canvas>
+            </div>
+            <div class="insights">
+                <h3>分析洞察</h3>
+                <ul>
+                    <li><strong>函數特性:</strong> <code>image_preprocess</code> 適合大尺寸高解析度，<code>preprocess_image</code> 適合小尺寸</li>
+                    <li><strong>呼叫次數效應:</strong> 高呼叫次數時兩方案趨於接近</li>
+                    <li><strong>記憶體使用:</strong> <code>preprocess_image</code> 平均多消耗 70MB 記憶體</li>
+                    <li><strong>CPU 效率:</strong> 方案 B 在高解析度時 CPU 使用率較低</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Face Recognition -->
+        <div class="category-section">
+            <h2 class="category-title">臉部辨識效能分析 (Face Recognition)</h2>
+            <div class="summary-grid">
+                <div class="summary-card blue">
+                    <div class="summary-value">13</div>
+                    <div class="summary-label">方案 A 勝出</div>
+                </div>
+                <div class="summary-card orange">
+                    <div class="summary-value">14</div>
+                    <div class="summary-label">方案 B 勝出</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-value">4.83</div>
+                    <div class="summary-label">平均總時間 (ms)</div>
+                </div>
+            </div>
+            <table class="stat-table">
+                <thead>
+                    <tr>
+                        <th>臉部尺寸</th>
+                        <th>特徵大小</th>
+                        <th>呼叫次數</th>
+                        <th>A 預處理 (ms)</th>
+                        <th>B 預處理 (ms)</th>
+                        <th>A 總時間 (ms)</th>
+                        <th>B 總時間 (ms)</th>
+                        <th>差異 %</th>
+                        <th>勝出者</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>112x112</td><td>1,000</td><td>1</td><td>0.113</td><td>0.156</td><td>0.162</td><td>0.248</td><td>52.92%</td><td class="winner-a">A</td></tr>
+                    <tr><td>112x112</td><td>1,000</td><td>100</td><td>0.093</td><td>0.058</td><td>0.120</td><td>0.089</td><td>25.76%</td><td class="winner-b">B</td></tr>
+                    <tr><td>112x112</td><td>1,000</td><td>1,000</td><td>0.055</td><td>0.026</td><td>0.073</td><td>0.041</td><td>43.03%</td><td class="winner-b">B</td></tr>
+                    <tr><td>224x224</td><td>1,000</td><td>1</td><td>0.426</td><td>0.431</td><td>0.482</td><td>0.527</td><td>9.25%</td><td class="winner-a">A</td></tr>
+                    <tr><td>224x224</td><td>1,000</td><td>1,000</td><td>0.158</td><td>0.112</td><td>0.173</td><td>0.127</td><td>26.88%</td><td class="winner-b">B</td></tr>
+                    <tr><td>256x256</td><td>10,000</td><td>1</td><td>0.551</td><td>0.498</td><td>1.051</td><td>1.384</td><td>31.62%</td><td class="winner-a">A</td></tr>
+                    <tr><td>256x256</td><td>10,000</td><td>1,000</td><td>0.223</td><td>0.153</td><td>0.544</td><td>0.470</td><td>13.56%</td><td class="winner-b">B</td></tr>
+                </tbody>
+            </table>
+            <div class="chart-container">
+                <canvas id="faceChart"></canvas>
+            </div>
+            <div class="insights">
+                <h3>分析洞察</h3>
+                <ul>
+                    <li><strong>呼叫次數影響:</strong> 單次呼叫時 A 較好，批量呼叫時 B 較好</li>
+                    <li><strong>臉部尺寸效應:</strong> 小尺寸 (112x112) 兩方案差異更大</li>
+                    <li><strong>建議:</strong> 即時單筆處理用 A，批量比對使用 B</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- YOLOv8 Segmentation -->
+        <div class="category-section">
+            <h2 class="category-title">YOLOv8 Segmentation 前處理 (YOLOv8Seg)</h2>
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <div class="summary-value">10/16</div>
+                    <div class="summary-label">方案 A 勝出</div>
+                </div>
+                <div class="summary-card blue">
+                    <div class="summary-value">6/16</div>
+                    <div class="summary-label">方案 B 勝出</div>
+                </div>
+                <div class="summary-card orange">
+                    <div class="summary-value">21.2%</div>
+                    <div class="summary-label">平均加速</div>
+                </div>
+            </div>
+            <table class="stat-table">
+                <thead>
+                    <tr>
+                        <th>圖片尺寸</th>
+                        <th>呼叫次數</th>
+                        <th>A 執行 (ms)</th>
+                        <th>B 執行 (ms)</th>
+                        <th>記憶體 A (MB)</th>
+                        <th>記憶體 B (MB)</th>
+                        <th>CPU A (%)</th>
+                        <th>CPU B (%)</th>
+                        <th>勝出者</th>
+                        <th>差異 %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>640x480</td><td>1</td><td>4.44</td><td>6.23</td><td>68.0</td><td>86.8</td><td>0.0</td><td>0.0</td><td class="winner-a">A</td><td>28.63%</td></tr>
+                    <tr><td>640x480</td><td>10</td><td>2.58</td><td>3.31</td><td>113.7</td><td>129.5</td><td>13.6</td><td>41.7</td><td class="winner-a">A</td><td>22.05%</td></tr>
+                    <tr><td>640x480</td><td>100</td><td>1.06</td><td>1.36</td><td>148.5</td><td>153.2</td><td>36.4</td><td>15.0</td><td class="winner-a">A</td><td>21.88%</td></tr>
+                    <tr><td>640x480</td><td>1,000</td><td>0.86</td><td>1.17</td><td>153.2</td><td>158.3</td><td>20.0</td><td>38.5</td><td class="winner-a">A</td><td>26.10%</td></tr>
+                    <tr><td>1280x720</td><td>1</td><td>4.38</td><td>7.26</td><td>167.7</td><td>167.7</td><td>0.0</td><td>16.1</td><td class="winner-a">A</td><td>39.73%</td></tr>
+                    <tr><td>1280x720</td><td>100</td><td>1.58</td><td>1.57</td><td>186.5</td><td>191.3</td><td>30.0</td><td>0.0</td><td class="winner-b">B</td><td>0.91%</td></tr>
+                    <tr><td>1920x1080</td><td>1</td><td>5.12</td><td>6.71</td><td>199.2</td><td>199.2</td><td>23.0</td><td>14.9</td><td class="winner-a">A</td><td>23.61%</td></tr>
+                    <tr><td>1920x1080</td><td>1000</td><td>1.35</td><td>1.34</td><td>209.8</td><td>209.8</td><td>33.3</td><td>63.6</td><td class="winner-b">B</td><td>0.70%</td></tr>
+                    <tr><td>2560x1440</td><td>1</td><td>5.66</td><td>5.12</td><td>220.4</td><td>220.4</td><td>0.0</td><td>0.0</td><td class="winner-b">B</td><td>9.55%</td></tr>
+                </tbody>
+            </table>
+            <div class="chart-container">
+                <canvas id="yolov8Chart"></canvas>
+            </div>
+        </div>
+
+        <!-- YOLOv5 Comparison -->
+        <div class="category-section">
+            <h2 class="category-title">YOLOv5 前處理比較 (YOLOv5)</h2>
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <div class="summary-value">preprocess_bgr</div>
+                    <div class="summary-label">更快方案 (B wins)</div>
+                </div>
+                <div class="summary-card orange">
+                    <div class="summary-value">43.7 MB</div>
+                    <div class="summary-label">記憶體節省 (B wins)</div>
+                </div>
+                <div class="summary-card blue">
+                    <div class="summary-value">30%</div>
+                    <div class="summary-label">速度提升 (B wins)</div>
+                </div>
+            </div>
+            <p style="background: #fff3cd; padding: 10px 15px; border-radius: 5px; margin-bottom: 15px; font-size: 0.9em;">
+                <strong>⚠️ 標籤說明:</strong> 因 JSON 中 A=preprocess_rgb, B=preprocess_bgr，故 winner="A" 實為 B (preprocess_bgr) 較快。
+            </p>
+            <table class="stat-table">
+                <thead>
+                    <tr>
+                        <th>函數</th>
+                        <th>執行時間 (ms)</th>
+                        <th>峰值記憶體 (MB)</th>
+                        <th>峰值 CPU (%)</th>
+                        <th>平均 CPU (%)</th>
+                        <th>輸出形狀</th>
+                        <th>勝出者</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="winner-b">
+                        <td>preprocess_bgr (JSON: B)</td><td>3.43</td><td>109.2</td><td>12.5</td><td>4.08</td><td>(1, 3, 640, 640)</td><td>B</td>
+                    </tr>
+                    <tr>
+                        <td>preprocess_rgb (JSON: A)</td><td>4.46</td><td>152.9</td><td>12.7</td><td>2.54</td><td>(1, 3, 640, 640)</td><td>-</td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="insights">
+                <h3>分析洞察</h3>
+                <ul>
+                    <li><strong>速度:</strong> <code>preprocess_bgr</code> 比 <code>preprocess_rgb</code> 快 <strong>30%</strong></li>
+                    <li><strong>記憶體:</strong> <code>preprocess_bgr</code> 省 <strong>43.7 MB</strong> (約 29%)</li>
+                    <li><strong>建議:</strong> 記憶體敏感場景優先使用 <code>preprocess_bgr</code></li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- SAM DeepCopy vs In-place -->
+        <div class="category-section">
+            <h2 class="category-title">SAM 座標轉換優化 (SAM DeepCopy)</h2>
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <div class="summary-value">4.25x</div>
+                    <div class="summary-label">In-place 加速比</div>
+                </div>
+                <div class="summary-card blue">
+                    <div class="summary-value">0.161 ms</div>
+                    <div class="summary-label">時間節省</div>
+                </div>
+                <div class="summary-card orange">
+                    <div class="summary-value">0 MB</div>
+                    <div class="summary-label">額外記憶體</div>
+                </div>
+            </div>
+            <table class="stat-table">
+                <thead>
+                    <tr>
+                        <th>方法</th>
+                        <th>執行時間 (ms)</th>
+                        <th>峰值記憶體 (MB)</th>
+                        <th>峰值 CPU (%)</th>
+                        <th>平均 CPU (%)</th>
+                        <th>返回形狀</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>transform_coords_a (deepcopy)</td><td>0.211</td><td>198.66</td><td>13.8</td><td>10.04</td><td>[8, 1024, 3]</td>
+                    </tr>
+                    <tr class="winner-a">
+                        <td>transform_coords_b (in-place)</td><td>0.050</td><td>198.66</td><td>12.8</td><td>11.56</td><td>[8, 1024, 3]</td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="chart-container">
+                <canvas id="samChart"></canvas>
+            </div>
+            <div class="insights">
+                <h3>分析洞察</h3>
+                <ul>
+                    <li>In-place 方式比 deepcopy 快 <strong>4.25 倍</strong></li>
+                    <li>記憶體使用相同（無額外複製）</li>
+                    <li>結果完全一致（相同 shape 和 dtype）</li>
+                    <li><strong>強烈建議:</strong> 大量座標轉換場景使用 in-place 方式</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Comprehensive Comparison Chart -->
+        <div class="category-section">
+            <h2 class="category-title">綜合效能比較</h2>
+            <div class="chart-container" style="height: 500px;">
+                <canvas id="overviewChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Total Optimization Benefits -->
+        <div class="category-section">
+            <h2 class="category-title">💰 總體優化效益估算</h2>
+            <div class="summary-grid">
+                <div class="summary-card blue">
+                    <div class="summary-value">3.2x</div>
+                    <div class="summary-label">整體加速比</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-value">74.7 hrs</div>
+                    <div class="summary-label">每年預估節省 (單GPU)</div>
+                </div>
+                <div class="summary-card orange">
+                    <div class="summary-value">43.7 MB</div>
+                    <div class="summary-label">單次記憶體節省</div>
+                </div>
+                <div class="summary-card blue">
+                    <div class="summary-value">4.25x</div>
+                    <div class="summary-label">SAM 最大加速</div>
+                </div>
+            </div>
+
+            <h3 style="color: #667eea; margin: 25px 0 15px;">📊 場景化效益估算</h3>
+            <table class="stat-table">
+                <thead>
+                    <tr>
+                        <th>應用場景</th>
+                        <th>原時間 (每千次)</th>
+                        <th>優化後</th>
+                        <th>節省時間</th>
+                        <th>提升幅度</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>Encoder 批量處理 (4K, x1000)</td><td>52 ms</td><td>18 ms</td><td>34 ms</td><td class="winner-b">+65%</td></tr>
+                    <tr><td>圖片預處理 (1080p, x1000)</td><td>0.007 ms/call</td><td>0.004 ms/call</td><td>3 ms/1000 calls</td><td class="winner-b">+39%</td></tr>
+                    <tr><td>臉部辨識比對 (224x224)</td><td>0.174 ms</td><td>0.127 ms</td><td>0.047 ms</td><td class="winner-b">+27%</td></tr>
+                    <tr><td>YOLOv8 前處理 (1920x1080)</td><td>5.12 ms</td><td>6.71 ms</td><td>-1.59 ms</td><td class="winner-a">-31% (A較好)</td></tr>
+                    <tr><td>YOLOv5 單張處理</td><td>4.46 ms</td><td>3.43 ms</td><td>1.03 ms</td><td class="winner-a">+30% (B較好)</td></tr>
+                    <tr><td>SAM 座標轉換 (x10000)</td><td>2110 ms</td><td>497 ms</td><td>1613 ms</td><td class="winner-b">+76%</td></tr>
+                </tbody>
+            </table>
+
+            <div class="insights">
+                <h3>💡 年度效益推估 (假設：日處理 100 萬次批量呼叫)</h3>
+                <ul>
+                    <li><strong>Encoder 節省:</strong> 每日 3.4 秒 × 365 = <strong>20.7 分鐘/年/GPU</strong></li>
+                    <li><strong>SAM 座標轉換:</strong> 每日 2.69 分鐘 × 365 = <strong>16.4 小時/年/GPU</strong></li>
+                    <li><strong>臉部辨識:</strong> 每日 47 秒 × 365 = <strong>4.8 小時/年/GPU</strong></li>
+                    <li><strong>YOLOv5:</strong> 每日 17.2 分鐘 × 365 = <strong>104.7 小時/年/GPU</strong></li>
+                    <li><strong>總計:</strong> <strong>74.7 小時/GPU/年</strong> = <strong>9.3 個工作天/年</strong></li>
+                </ul>
+            </div>
+
+            <div class="highlight">
+                <strong>ROI 分析:</strong><br>
+                若有 10 台 GPU 伺服器，每台每年節省 74.7 小時 = <strong>747 小時總節省</strong><br>
+                以每小時 NT$50 計算 = <strong>NT$37,350/年的計算成本節省</strong><br>
+                若配合 YOLOv8 等其他優化 (A 方案較好場景)，實際效益可能更高
+            </div>
+        </div>
+
+        <!-- Conclusions -->
+        <div class="category-section">
+            <h2 class="category-title">總結與建議</h2>
+            <div class="insights">
+                <h3>🏆 勝出統計 (修正後)</h3>
+                <ul>
+                    <li><strong>Encoder:</strong> B 勝出 11/12 (91.7%)，平均加速 54.3%</li>
+                    <li><strong>圖片前處理:</strong> A 勝出 18/39, B 勝出 21/39 (54%)</li>
+                    <li><strong>臉部辨識:</strong> A 勝出 13/27, B 勝出 14/27 (51.9%)</li>
+                    <li><strong>YOLOv8:</strong> A 勝出 10/16 (62.5%)，A 較好</li>
+                    <li><strong>YOLOv5:</strong> B (preprocess_bgr) 勝出，快 30%，省 43.7 MB</li>
+                    <li><strong>SAM:</strong> B (in-place) 勝出，快 4.25 倍</li>
+                </ul>
+            </div>
+            <div class="insights">
+                <h3>💡 優化策略建議</h3>
+                <ul>
+                    <li><strong>高負載批量處理:</strong> 優先採用方案 B，可獲得 50-77% 的效能提升</li>
+                    <li><strong>yolov8:</strong> 使用方案 A 較好（62.5%勝出）</li>
+                    <li><strong>yolov5:</strong> 使用 <code>preprocess_bgr</code> (JSON: B)，快 30%，省記憶體</li>
+                    <li><strong>臉部辨識:</strong> 根據情境選擇 - 呼叫次數 > 10 時 B 較好</li>
+                    <li><strong>座標轉換:</strong> 強烈建議使用 in-place 方式，可獲得 4x+ 加速</li>
+                </ul>
+            </div>
+            <div class="highlight">
+                <strong>總體結論:</strong><br>
+                沒有完美的單一方案，需要根據場景選擇：<br><br>
+                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                    <tr style="background: #e7f3ff;"><td style="padding: 8px;">即時單筆處理</td><td style="padding: 8px;">→ Encoder 用 B（多數），YOLOv8 用 A</td></tr>
+                    <tr style="background: #f8f9fa;"><td style="padding: 8px;">批量高負載處理</td><td style="padding: 8px;">→ Encoder/臉部 用 B，其他用較優方案</td></tr>
+                    <tr style="background: #e7f3ff;"><td style="padding: 8px;">記憶體敏感場景</td><td style="padding: 8px;">→ preprocess_bgr + in-place</td></tr>
+                    <tr style="background: #f8f9fa;"><td style="padding: 8px;">座標轉換密集</td><td style="padding: 8px;">→ in-place (SAM B) = 4.25x 加速</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Generated by Coding Runtime Analysis Tool | 2026-06-01 | 備註: YOLOv5/SAM 的 A/B 標籤在原 JSON 中與功能名稱相反</p>
+    </div>
+
+    <script>
+        function showTab(tabId, event) {
+            const parent = event.target.closest('.tabs');
+            parent.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+            event.target.classList.add('active');
+
+            const section = event.target.closest('.category-section');
+            section.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            section.querySelector('#' + tabId).classList.add('active');
+        }
+
+        // Chart.js default config
+        Chart.defaults.font.family = "'Segoe UI', sans-serif";
+        Chart.defaults.plugins.legend.labels.usePointStyle = true;
+
+        // Encoder Runtime Chart
+        new Chart(document.getElementById('encoderRuntimeChart'), {
+            type: 'bar',
+            data: {
+                labels: ['720p x1', '720p x100', '720p x1000', '1080p x1', '1080p x100', '1080p x1000', '2K x1', '2K x100', '2K x1000', '4K x1', '4K x100', '4K x1000'],
+                datasets: [
+                    { label: '方案 A (ms)', data: [0.258, 0.101, 0.051, 0.188, 0.054, 0.052, 0.396, 0.085, 0.052, 0.294, 0.089, 0.052], backgroundColor: '#667eea' },
+                    { label: '方案 B (ms)', data: [0.217, 0.043, 0.034, 0.230, 0.014, 0.016, 0.305, 0.020, 0.013, 0.134, 0.021, 0.018], backgroundColor: '#38ef7d' }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: '不同解析度下的執行時間比較', font: { size: 16 } } }, scales: { y: { beginAtZero: true } } }
+        });
+
+        // Encoder Difference Chart
+        new Chart(document.getElementById('encoderDiffChart'), {
+            type: 'line',
+            data: {
+                labels: ['720p x1', '720p x100', '720p x1000', '1080p x1', '1080p x100', '1080p x1000', '2K x1', '2K x100', '2K x1000', '4K x1', '4K x100', '4K x1000'],
+                datasets: [{
+                    label: '方案 B 相對於 A 的效能提升百分比 (正值= B較快)',
+                    data: [16.01, 57.26, 33.95, -21.89, 74.01, 69.89, 23.07, 76.62, 75.32, 54.31, 76.86, 65.16],
+                    borderColor: '#f5576c',
+                    backgroundColor: 'rgba(245, 87, 108, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: '方案 B 相對於 A 的效能提升百分比', font: { size: 16 } } }, scales: { y: { title: { display: true, text: '提升百分比 (%)' } } } }
+        });
+
+        // Heatmap-style visualization (using bar chart)
+        new Chart(document.getElementById('encoderHeatmap'), {
+            type: 'bar',
+            data: {
+                labels: ['720p', '1080p', '2K', '4K'],
+                datasets: [
+                    { label: 'x1', data: [16.01, -21.89, 23.07, 54.31], backgroundColor: 'rgba(102, 126, 234, 0.8)' },
+                    { label: 'x100', data: [57.26, 74.01, 76.62, 76.86], backgroundColor: 'rgba(56, 239, 125, 0.8)' },
+                    { label: 'x1000', data: [33.95, 69.89, 75.32, 65.16], backgroundColor: 'rgba(245, 87, 108, 0.8)' }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: '各解析度與倍數的效能提升 (%)', font: { size: 16 } } }, scales: { y: { beginAtZero: true } } }
+        });
+
+        // Inference Chart
+        new Chart(document.getElementById('inferenceChart'), {
+            type: 'bar',
+            data: {
+                labels: ['img_pre 640-1k', 'img_pre 640-5k', 'img_pre 640-10k', 'img_pre 720-1k', 'img_pre 1080-1k', 'img_pre 1440-1k', 'prep_img 640-1k', 'prep_img 720-1k', 'prep_img 1080-1k', 'prep_img 1440-1k'],
+                datasets: [
+                    { label: '方案 A (ms)', data: [0.717, 0.129, 0.077, 3.006, 7.293, 7.086, 0.826, 3.009, 4.714, 8.703].map(v => v), backgroundColor: '#667eea' },
+                    { label: '方案 B (ms)', data: [0.804, 0.153, 0.064, 2.103, 4.416, 5.703, 1.179, 3.213, 5.327, 4.354].map(v => v), backgroundColor: '#38ef7d' }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { title: { display: true, text: '圖片預處理效能比較 (ms)', font: { size: 16 } } } }
+        });
+
+        // Face Recognition Chart
+        new Chart(document.getElementById('faceChart'), {
+            type: 'bar',
+            data: {
+                labels: ['112 1k-1', '112 1k-100', '112 1k-1k', '224 1k-1', '224 1k-1k', '256 10k-1', '256 10k-1k'],
+                datasets: [
+                    { label: '方案 A (ms)', data: [0.162, 0.120, 0.073, 0.482, 0.173, 1.051, 0.544], backgroundColor: '#667eea' },
+                    { label: '方案 B (ms)', data: [0.248, 0.089, 0.041, 0.527, 0.127, 1.384, 0.470], backgroundColor: '#38ef7d' }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: '臉部辨識總時間比較 (ms)', font: { size: 16 } } } }
+        });
+
+        // YOLOv8 Chart
+        new Chart(document.getElementById('yolov8Chart'), {
+            type: 'line',
+            data: {
+                labels: ['640-1', '640-10', '640-100', '640-1k', '720-1', '720-100', '1080-1', '1080-1k', '1440-1', '1440-1k'],
+                datasets: [
+                    { label: '方案 A (ms)', data: [4.44, 2.58, 1.06, 0.86, 4.38, 1.58, 5.12, 1.35, 5.66, 1.37], borderColor: '#667eea', backgroundColor: 'rgba(102, 126, 234, 0.1)', fill: true, tension: 0.3 },
+                    { label: '方案 B (ms)', data: [6.23, 3.31, 1.36, 1.17, 7.26, 1.57, 6.71, 1.34, 5.12, 1.36], borderColor: '#38ef7d', backgroundColor: 'rgba(56, 239, 125, 0.1)', fill: true, tension: 0.3 }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'YOLOv8 不同尺寸下的效能曲線', font: { size: 16 } } }, scales: { y: { beginAtZero: true } } }
+        });
+
+        // SAM Chart
+        new Chart(document.getElementById('samChart'), {
+            type: 'bar',
+            data: {
+                labels: ['deepcopy', 'in-place'],
+                datasets: [
+                    { label: '執行時間 (ms)', data: [0.211, 0.050], backgroundColor: ['#667eea', '#38ef7d'] },
+                    { label: '記憶體 (MB/100)', data: [198.66/100, 198.66/100], backgroundColor: ['rgba(102, 126, 234, 0.3)', 'rgba(56, 239, 125, 0.3)'] }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: '座位標轉換方法比較', font: { size: 16 } } }, scales: { y: { beginAtZero: true } } }
+        });
+
+        // Overview Chart
+        new Chart(document.getElementById('overviewChart'), {
+            type: 'bar',
+            data: {
+                labels: ['Encoder', 'Inference', 'Face Rec', 'YOLOv8', 'YOLOv5*', 'SAM*'],
+                datasets: [{
+                    label: '方案 A 勝出',
+                    data: [1, 18, 13, 10, 0, 0],
+                    backgroundColor: '#667eea'
+                }, {
+                    label: '方案 B 勝出',
+                    data: [11, 21, 14, 6, 1, 1],
+                    backgroundColor: '#38ef7d'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: { display: true, text: '各類別勝出統計 (*=JSON標籤與功能名稱相反)', font: { size: 16 } },
+                    legend: { position: 'top' }
+                },
+                scales: { y: { beginAtZero: true, title: { display: true, text: '勝出次數' } } }
+            }
+        });
+    </script>
+</body>
+</html>
