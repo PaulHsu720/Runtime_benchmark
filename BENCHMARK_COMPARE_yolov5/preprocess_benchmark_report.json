@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-05-29T11:49:19.332105",
+  "function_a": {
+    "name": "preprocess_bgr",
+    "runtime_seconds": 0.0034275332000106573,
+    "peak_memory_mb": 109.15625,
+    "peak_cpu_percent": 12.5,
+    "avg_cpu_percent": 4.08,
+    "success": true,
+    "error": "",
+    "output_shape": "(1, 3, 640, 640)",
+    "output_dtype": "float32"
+  },
+  "function_b": {
+    "name": "preprocess_rgb",
+    "runtime_seconds": 0.004457416431978345,
+    "peak_memory_mb": 152.875,
+    "peak_cpu_percent": 12.7,
+    "avg_cpu_percent": 2.54,
+    "success": true,
+    "error": "",
+    "output_shape": "(1, 3, 640, 640)",
+    "output_dtype": "float32"
+  },
+  "comparison": {
+    "time_diff_seconds": -0.0010298832319676878,
+    "time_speedup_ratio": 0.7689506359380938,
+    "memory_diff_mb": -43.71875,
+    "cpu_diff_percent": -0.1999999999999993,
+    "results_match": true,
+    "match_type": "identical"
+  }
+}

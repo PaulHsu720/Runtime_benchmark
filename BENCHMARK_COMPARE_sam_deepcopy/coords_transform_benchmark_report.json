@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-05-29T13:25:23.256951",
+  "function_a": {
+    "name": "transform_coords_a (deepcopy)",
+    "runtime_seconds": 0.00021134959533810615,
+    "peak_memory_mb": 198.65625,
+    "peak_cpu_percent": 13.8,
+    "avg_cpu_percent": 10.040000000000001,
+    "success": true,
+    "error_message": "",
+    "return_shape": "torch.Size([8, 1024, 3])",
+    "return_dtype": "torch.float32"
+  },
+  "function_b": {
+    "name": "transform_coords_b (in-place)",
+    "runtime_seconds": 4.971679300069809e-05,
+    "peak_memory_mb": 198.65625,
+    "peak_cpu_percent": 12.8,
+    "avg_cpu_percent": 11.559999999999999,
+    "success": true,
+    "error_message": "",
+    "return_shape": "torch.Size([8, 1024, 3])",
+    "return_dtype": "torch.float32"
+  },
+  "comparison": {
+    "time_diff_seconds": 0.00016163280233740806,
+    "time_speedup_ratio": 4.251070565535844,
+    "memory_diff_mb": 0.0,
+    "cpu_diff_percent": 1.0,
+    "results_match": true,
+    "match_type": "same_shape_and_dtype"
+  }
+}
